@@ -10,6 +10,18 @@ init()
    fi
 }
 
+
+Write_to_record_log_function ()
+{
+#input: action (insert,delete,search,updateName,...)
+#input: status if passed or failed
+#WRITE TO LOG FILE
+#DISPLAY DATE TIME ACTION SUCCESS/FAILURE (except print functions)
+
+echo -n $( date "+%D %T" ) >> recordFileName_log
+echo " $Action $Status" >> recordFileName_log
+}
+
 Insert_record_function ()
 {
 # as input:record_name
@@ -39,6 +51,8 @@ if [[ $counter -eq 1 ]]; then
 	STRING_HOLDER="${record_name[0]},$new_amount"
 	sed -i "s/$string_holder/$STRING_HOLDER/" $FILE
 	echo "'${record_name[0]}' amount has been updated from '${record_amount[0]}' to '$new_amount'"
+	#WRITE TO LOG FILE AS SUCCESS
+	Action="Insert"
 	Status="Success"
 	Write_to_record_log_function
  elif [[ $counter -gt 1 ]]; then
@@ -48,12 +62,20 @@ if [[ $counter -eq 1 ]]; then
 	Menu="$x$rcd,$option_to_quit"
 	select var in $Menu;
 		do
-		#IF THE USER CHOOSES QUIT HE GOES BACK TO MAIN MENU
+		#IF THE USER CHOOSES TO QUIT HE GOES BACK TO MAIN MENU
 		if [[ $var == "Quit" ]]; then
 			break;
+		#WRITE TO LOG FILE AS FAILURE
+			Action="Insert"
+			Status="Failure"
+			Write_to_record_log_function
 		elif [[ $var == $rcd ]]; then
 		#IF USER CHOOSES TO USE HIS STRING AS NEW DISK
 			echo "$rcd,$amount" >> $FILE
+		#WRITE TO LOG FILE AS SUCCESS
+			Action="Insert"
+			Status="Success"
+			Write_to_record_log_function
 			break;
 		else
 			echo
@@ -69,12 +91,19 @@ if [[ $counter -eq 1 ]]; then
 		# replace the data rows:
 		sed -i "s/$string_holder/$STRING_HOLDER/" $FILE
 		echo "'${record_name[$count_from_zero]}' amount has been updated from '${record_amount[$count_from_zero]}' to '$new_amount'"
+		#WRITE TO LOG FILE AS SUCCESS
+		Action="Insert"
+		Status="Success"
+		Write_to_record_log_function
 		break;
 		done
 else
 	# param rcd is not found in the records file, a new record will be add in:
 	echo "$rcd,$amount" >> $FILE
 	echo "new record added in the $FILE: $rcd,$amount"
+	Action="Insert"
+	Status="Success"
+	Write_to_record_log_function
 fi
 }
 
@@ -109,6 +138,9 @@ if [ -z $record_name ]
 then
 # record not existed
         echo "the requested $delete_record_name is not exists"
+		Action="Delete"
+		Status="Failure"
+		Write_to_record_log_function
 else
         PS3="please select existing record name for the list above:  "
         select var in ${record_name[@]}
@@ -117,12 +149,19 @@ else
                 let nAmount=${record_amount[$REPLY]}-$delete_amount
                 if [ $nAmount -eq 0 ]
                 then
-                        sed -i "/$delete_record_name/d" $FILE
+						sed -i "/$delete_record_name/d" $FILE
+					#WRITING TO LOG FILE
+					Action="Delete"
+					Status="Success"
+					Write_to_record_log_function
                 elif [ $nAmount -gt 0 ]
                 then
                         echo "update amount"
                 else
                         echo "invalid amount requested to delete"
+						Action="Delete"
+						Status="Failure"
+						Write_to_record_log_function
                 fi
                 break
         done
@@ -132,6 +171,7 @@ fi
 Search_string_in_file ()
 {
 # as input:str from user
+Action="Search"
 if [ $# -eq 0 ];
 then
 	read -p "Enter the record you search for: " user_input
@@ -152,9 +192,13 @@ if [[ $counter -ne 0 ]]; then
 		echo "$i. ${record_name[$i]},${record_amount[$i]}"
 		let i=$i+1
 	done
+	Status="Success"
+	Write_to_record_log_function
 		echo "We found $counter results for '$user_input' "
 	else
 		echo "finished the search operation, can not find any match"
+		Status="Failure"
+		Write_to_record_log_function
 fi
 }
 
@@ -169,10 +213,11 @@ Update_record_name_function ()
 read -p "Please enter the Old Name: " old_name
 read -p "Please enter the New Name: " new_name
 Search_string_in_file $old_name
-Action="UpdateName"
+
 if [[ $counter -eq 1 ]]; then
 	sed -i "s/${record_name[0]}/$new_name/" $FILE
 	echo "'${record_name[0]}' has been updated to $new_name"
+	Action="UpdateName"
 	Status="Success"
 	Write_to_record_log_function
 elif [[ $counter -gt 1 ]]; then
@@ -187,6 +232,7 @@ do
 let count_from_zero=$REPLY-1
 	sed -i "s/${record_name[$count_from_zero]}/$new_name/" $FILE
 	echo "${record_name[$count_from_zero]} has been updated to $new_name"
+	Action="UpdateName"
 	Status="Success"
 	Write_to_record_log_function
 	break;
@@ -194,6 +240,7 @@ done
 #####	
 else
 	echo "The record name doesn't exist."
+	Action="UpdateName"
 	Status="Failure"
 	Write_to_record_log_function
 fi
@@ -209,16 +256,18 @@ Update_record_amount_function ()
 #If Amount less than 1 display "Error"
 #Else echo record doesn't exist
 
+
 read -p "Please Enter the Record Name: " rec_name
 read -p "Please Enter the Record Amount: " rec_amount
 Search_string_in_file $rec_name
-Action="UpdateAmount"
+
 if [[ $counter -eq 1 ]]; then
 #SETTING STATUS
-	sed -i "s/${record_amount[0]}/$rec_amount/" $FILE
-	echo "'${record_name[0]}' amount has been updated from '${record_amount[0]}' to '$rec_amount'"
+	Action="UpdateAmount"
 	Status="Success"
 	Write_to_record_log_function
+	sed -i "s/${record_amount[0]}/$rec_amount/" $FILE
+	echo "'${record_name[0]}' amount has been updated from '${record_amount[0]}' to '$rec_amount'"
 elif [[ $counter -gt 1 ]]; then
 #IF MORE THAN 1 RESULT MAKE A MENU
 PS3="Choose an option or quit: "
@@ -229,12 +278,14 @@ do
 let count_from_zero=$REPLY-1
 	sed -i "s/${record_amount[$count_from_zero]}/$rec_amount/" $FILE
 	echo "'${record_name[$count_from_zero]}' amount has been updated from '${record_amount[$count_from_zero]}' to '$rec_amount'"
+	Action="UpdateAmount"
 	Status="Success"
 	Write_to_record_log_function
 	break;
 done
 else
 	echo "Record doesn't exist, Error."
+	Action="UpdateAmount"
 	Status="Failure"
 	Write_to_record_log_function
 fi
@@ -249,8 +300,11 @@ Print_total_amount_function ()
 #! /bin/bash
 #check if file is empty
 
+Action="PrintAmount"
+
 if  [ -s $1 ] 
 then
+
 	x=$(cat $1 | cut -d "," -f2)
 	amount_arr=($x)
 	amount_counter=0
@@ -258,15 +312,19 @@ then
 	for i in ${amount_arr[@]}
 	do
 		let amount_counter=$amount_counter+$i
-	
 	done
+	#print to log file
+	echo -n $( date "+%D %T" ) >> recordFileName_log
+	echo " $Action $amount_counter" >> recordFileName_log
+	
 	if [ $amount_counter -gt 0 ]
 	then 
 		echo "the sum of all amounts is $amount_counter"
 	fi
 else
 	echo "the file $1 is empty" 
-
+	echo -n $( date "+%D %T" ) >> recordFileName_log
+	echo " $Action $amount_counter" >> recordFileName_log
 fi
 }
 
@@ -275,24 +333,28 @@ Print_sorted_record_file_function ()
 # no input parameters
 #check if file is empty
 # will take a records_file as input $1
+Action="PrintAll"
 if  [ -s $1 ]
 then
         echo $1 | sort -t "," -k1 $1
+		IFS=','
+		x=$(cat $FILE |cut -d ',' -f1 |tr '\n' ',')
+		record_name=($x)
+		y=$(cat $FILE|cut -d ',' -f2 |tr '\n' ',')
+		record_amount=($y)
+		counter=${#record_name[@]}
+		i=0
+		while [[ $i -lt $counter ]];
+		do
+		echo -n $( date "+%D %T" ) >> recordFileName_log
+		echo " $Action ${record_name[$i]} ${record_amount[$i]}" >> recordFileName_log
+		let i=$i+1
+		done
 else
         echo "The file $1 is empty"
 fi
 }
 
-Write_to_record_log_function ()
-{
-#input: action (insert,delete,search,updateName,...)
-#input: status if passed or failed
-#WRITE TO LOG FILE
-#DISPLAY DATE TIME ACTION SUCCESS/FAILURE (except print functions)
-
-echo -n $( date "+%D %T" ) >> recordFileName_log
-echo " $Action $Status" >> recordFileName_log
-}
 
 record_name_vld_function()
 { 
